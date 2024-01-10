@@ -1,27 +1,25 @@
 import tkinter as tk 
 
-
+CONNECTION_STATUS='not connected'
 class superfansGUI:
+    def exit_program(self):
+        quit()
     def __init__(self):
 
         self.root = tk.Tk()
 
         self.root.title('"superfans" GUI Utility')
 
-        self.root.geometry('570x500')
-        #self.heading = tk.Label(self.root, text='"superfans GUI Utility"')
-        #self.heading.pack()
-
         ## Main Containers ##
-        self.loginFrame = tk.Frame(self.root, width=560, height=50, pady=3)
-        self.statusFrame = tk.Frame(self.root, width=560, height=30, pady=3)
-        self.presetFrame = tk.Frame(self.root, width=560, height=50, pady=3)
-        self.actionFrame = tk.Frame(self.root, width=560, height=150, pady=3)
+        self.loginFrame = tk.LabelFrame(self.root, text='Server Hostname and Creds', width=560, height=50, pady=3)
+        self.statusFrame = tk.LabelFrame(self.root, text='IPMI Connection Status', width=560, height=30, pady=3)
+        self.presetFrame = tk.LabelFrame(self.root, text='Select Common Fan Speed Presets', width=560, height=50, pady=3)
+        self.actionFrame = tk.LabelFrame(self.root, text='Click for Action', width=560, height=150, pady=3)
 
-        ## Layout Containers ##
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
-
+        
+        ## Layout Main Containers ##
         self.loginFrame.grid(row=0, sticky='EW')
         self.statusFrame.grid(row=1, sticky='EW')
         self.presetFrame.grid(row=2, sticky='EW')
@@ -34,8 +32,8 @@ class superfansGUI:
         self.envpassLabel = tk.Label(self.loginFrame, text='envpass:')
         self.hostnameEntry = tk.Entry(self.loginFrame)
         self.usernameEntry = tk.Entry(self.loginFrame)
-        self.passwordEntry = tk.Entry(self.loginFrame)
-        self.envpassEntry = tk.Entry(self.loginFrame)
+        self.passwordEntry = tk.Entry(self.loginFrame, show='*')
+        self.envpassEntry = tk.Entry(self.loginFrame, show='*')
         
         self.hostnameLabel.grid(row=0, column=0)
         self.hostnameEntry.grid(row=0, column=1)
@@ -45,12 +43,19 @@ class superfansGUI:
         self.passwordEntry.grid(row=1, column=1)
         self.envpassLabel.grid(row=1, column=2)
         self.envpassEntry.grid(row=1, column=3)
+        
         ## status frame##
+        self.statusLabel = tk.Label(self.statusFrame, text='IPMI Not Connected', background='grey')
+        self.statusLabel.grid(row=0, column=0)
+
         ## preset frame ##
+
         ## action frame ##
-
-
-
+        # Connect, Get Status, Submit, Exit
+        self.checkBtn = tk.Button(self.actionFrame, text='Check Connection').grid(row=0,column=0)
+        self.fanstatusBtn = tk.Button(self.actionFrame, text='Get Fan Status').grid(row=0,column=1)
+        self.submitBtn = tk.Button(self.actionFrame, text='Submit Fan Speed/Profile').grid(row=0,column=2)
+        self.Exit = tk.Button(self.actionFrame, text='Exit Program', command=self.exit_program).grid(row=0,column=3)
 
 
         self.root.mainloop()
