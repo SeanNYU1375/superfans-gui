@@ -1,0 +1,59 @@
+import tkinter as tk 
+
+
+class superfansGUI:
+    def __init__(self):
+
+        self.root = tk.Tk()
+
+        self.root.title('"superfans" GUI Utility')
+
+        self.root.geometry('570x500')
+        #self.heading = tk.Label(self.root, text='"superfans GUI Utility"')
+        #self.heading.pack()
+
+        ## Main Containers ##
+        self.loginFrame = tk.Frame(self.root, width=560, height=50, pady=3)
+        self.statusFrame = tk.Frame(self.root, width=560, height=30, pady=3)
+        self.presetFrame = tk.Frame(self.root, width=560, height=50, pady=3)
+        self.actionFrame = tk.Frame(self.root, width=560, height=150, pady=3)
+
+        ## Layout Containers ##
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        self.loginFrame.grid(row=0, sticky='EW')
+        self.statusFrame.grid(row=1, sticky='EW')
+        self.presetFrame.grid(row=2, sticky='EW')
+        self.actionFrame.grid(row=3, sticky='EW')
+
+        ## login frame ##
+        self.hostnameLabel = tk.Label(self.loginFrame, text='hostname:')
+        self.usernameLabel = tk.Label(self.loginFrame, text='username:')
+        self.passwordLabel = tk.Label(self.loginFrame, text='password:')
+        self.envpassLabel = tk.Label(self.loginFrame, text='envpass:')
+        self.hostnameEntry = tk.Entry(self.loginFrame)
+        self.usernameEntry = tk.Entry(self.loginFrame)
+        self.passwordEntry = tk.Entry(self.loginFrame)
+        self.envpassEntry = tk.Entry(self.loginFrame)
+        
+        self.hostnameLabel.grid(row=0, column=0)
+        self.hostnameEntry.grid(row=0, column=1)
+        self.usernameLabel.grid(row=0, column=2)
+        self.usernameEntry.grid(row=0, column=3)
+        self.passwordLabel.grid(row=1, column=0)
+        self.passwordEntry.grid(row=1, column=1)
+        self.envpassLabel.grid(row=1, column=2)
+        self.envpassEntry.grid(row=1, column=3)
+        ## status frame##
+        ## preset frame ##
+        ## action frame ##
+
+
+
+
+
+        self.root.mainloop()
+
+
+superfansGUI()
