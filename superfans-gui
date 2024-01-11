@@ -1,9 +1,198 @@
 import tkinter as tk 
+import os, sys #click
+import subprocess, time, shutil, shlex
+
+FAN_PRESET_STANDARD=0
+FAN_PRESET_FULL=1
+FAN_PRESET_OPTIMAL=2
+FAN_PRESET_HEAVYIO=4
+FAN_PRESETS=[FAN_PRESET_STANDARD, FAN_PRESET_FULL, FAN_PRESET_OPTIMAL, FAN_PRESET_HEAVYIO]
+FAN_PRESETS_STR={\
+    'standard' : FAN_PRESET_STANDARD,\
+    'full' : FAN_PRESET_FULL,\
+    'optimal' : FAN_PRESET_OPTIMAL,\
+    'heavyio' : FAN_PRESET_HEAVYIO\
+}
+FAN_PRESETS_DESC={ \
+FAN_PRESET_STANDARD : "Standard (Temp controlled, target 50%)", \
+FAN_PRESET_FULL : "Full (All fans at 100%)", \
+FAN_PRESET_OPTIMAL : "Optimal (Temp controlled, target 30%)", \
+FAN_PRESET_HEAVYIO : "Heavy IO (Temp controlled, CPU target 50%; Peripherals target 75%" \
+}
 
 CONNECTION_STATUS='not connected'
 class superfansGUI:
+    def submit_picker(self):
+        # if manual OR none do manual
+        if self.preset_var.get() == 0: 
+            print ('checking fan input...')
+        # check for >0 (or minimum of fan)
+        # if preset
+        if self.preset_var.get() != 0:
+            print(self.preset_var.get())
+        # do preset work
+    def set_preset(self):
+        print('Preset Set: ' + self.preset_var.get())
+    
+    def using_env(self):
+        if self.chkState.get() == 1:
+            self.passwordEntry.delete(0, 'end')
+            self.passwordEntry.config(state='disabled')
+        else:
+            self.passwordEntry.config(state='normal')
+            print(self.chkState.get())
+    
+    def check_conn_btn(self):
+        # Make Sure Entry's are supplied/valid
+        self.hostname = self.hostnameEntry.get()
+        self.username = self.usernameEntry.get()
+        self.password = self.passwordEntry.get()
+        self.envpass = self.envpassEntry.get()
+
+        config = {}
+        config['hostname'] = self.hostname
+        config['username'] = self.username
+        config['password'] = self.password
+        config['envpass'] = self.envpass
+
+        if self.chkState.get() == 1:
+            ## Logic for getting IPMI_PASSWORD 
+            print('Using ENV VAR...work in progress')
+        else:
+            missingCred = []
+            ## Tell user which credentials are missing
+            for x in config.keys():
+                if len(config[x]) == 0:
+                    missingCred.append(x)
+            if len(missingCred) > 0:
+                print(missingCred)
+                #if len(x) == 0:
+                #    print('Please Enter Value for: ' + x)
+        
     def exit_program(self):
         quit()
+
+    def cli(ctx, hostname, username, password, env_password):
+        ctx.obj = {'hostname' : hostname, 'username' : username, 'password' : password, 'env_password' : env_password}
+
+
+    #@cli.command()
+    #@click.argument('speed', required=True, type=click.IntRange(0, 100))
+    #@click.option('--zone', '-z', default='all', help='Fan zone to target. Fans ending with a number are in the CPU zone; fans ending with a letter are in the peripheral zone. Default: all.', type=click.Choice(['cpu', 'periph', 'all']))
+    #@click.pass_context
+
+    def set(ctx, speed, zone):
+
+        # Make sure fans are on Full setting, or else this won't stick for long
+        s = get_fan_status(ctx.obj)
+        if s is False:
+            #click.echo("Unable to get current fan status; exiting")
+            return False
+
+        if s != FAN_PRESET_FULL:
+            #click.echo("The fan controller is currently not set to Full mode (required for manual fan settings, which will otherwise be adjusted by the BMC within minutes); setting it now.")
+            ctx.invoke(preset, preset='full')
+            #click.echo("Waiting 5 seconds to let fans spin up...")
+            time.sleep(5)
+
+        ok = True
+        if zone == 'all' or zone == 'cpu':
+            ok = ipmi_raw_cmd(ctx.obj, '0x30 0x70 0x66 0x01 0x00 0x%02x' % speed)
+        if ok and (zone == 'all' or zone == 'periph'):
+            ok = ipmi_raw_cmd(ctx.obj, '0x30 0x70 0x66 0x01 0x01 0x%02x' % speed)
+
+        if ok:
+            click.echo("Set %s fans on %s to %d%%." % (zone, ctx.obj['hostname'], speed))
+            return True
+        else:
+            click.echo("Unable to update fans.")
+            return False
+
+    #@cli.command()
+    #@click.pass_context
+    def status(ctx):
+        """
+        Retrieves fan controller preset & fan speed.
+        """
+        status = get_fan_status(ctx.obj)
+        if status is False:
+            return False
+        if status in FAN_PRESETS:
+            s = FAN_PRESETS_DESC[status]
+        else:
+            s = "Unknown status code %d" % status
+        # manual fan ctl     get(0)/set(1)  cpu(0)/periph(1)   duty(0-0x64)
+        # 0x30 0x70 0x66     0x00           0x00               0x64
+        fan_speed = ipmi_raw_cmd(ctx.obj, '0x30 0x70 0x66 0x00 0x00')
+        if fan_speed is False:
+            return False
+        fan_speed2 = ipmi_raw_cmd(ctx.obj, '0x30 0x70 0x66 0x00 0x01')
+        if fan_speed2 is False:
+            return False
+
+        #click.echo("Preset: %s" % s)
+        #click.echo("Current fan speed (CPU Zone): %d%%" % int(fan_speed, 16))
+        #click.echo("Current fan speed (Peripheral zone): %d%%" % int(fan_speed2, 16))
+        return True
+
+    def preset(ctx, preset):
+        if preset not in FAN_PRESETS_STR:
+            return False
+        preset = FAN_PRESETS_STR[preset]
+
+        if ipmi_raw_cmd(ctx.obj, "0x30 0x45 0x01 0x0%d" % preset):
+            #click.echo("Updated preset on %s." % ctx.obj['hostname'])
+            return True
+
+        return False
+
+    def ipmi_raw_cmd(config, raw_cmd, username=None, password=None):
+        hostname, username, password, use_env = (config['hostname'], config['username'], config['password'], config['env_password'])
+
+        if hostname == 'localhost':
+            if os.geteuid() != 0:
+                #click.echo("In order to communicate with the kernel's IPMI module, you must be root.")
+                sys.exit(1)
+            cmd = 'ipmitool raw %s' % raw_cmd
+        else:
+            if use_env:
+                cmd_pass = '-E'
+            else:
+                cmd_pass = '-P %s' % shlex.quote(password)
+            cmd = 'ipmitool -I lanplus -U %s %s -H %s raw %s' % (shlex.quote(username), cmd_pass, hostname, raw_cmd)
+
+        s = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if s.returncode != 0:
+            #click.echo("Error: Problem running ipmitool")
+            #click.echo("Command: %s" % cmd)
+            #click.echo("Return code: %d" % s.returncode)
+            #click.echo("Output: %s" % s.stdout.decode('utf-8').strip())
+            return False
+
+        out = s.stdout.strip()
+        if out:
+            return out
+        else:
+            return True
+
+    def get_fan_status(config):
+        try:
+            s = ipmi_raw_cmd(config, '0x30 0x45 0x00')
+            if s is False:
+                return False
+            return int(s)
+        except:
+            return False
+
+    if __name__ == '__main__':
+        # Prod
+        #if not shutil.which('ipmitool'):
+        # Test
+        if shutil.which('ipmitool'):
+            print("Error: superfans requires ipmitool to be installed and in your PATH.")
+            sys.exit(1)
+        #cli()
+    
     def __init__(self):
 
         self.root = tk.Tk()
@@ -14,6 +203,7 @@ class superfansGUI:
         self.loginFrame = tk.LabelFrame(self.root, text='Server Hostname and Creds', width=560, height=50, pady=3)
         self.statusFrame = tk.LabelFrame(self.root, text='IPMI Connection Status', width=560, height=30, pady=3)
         self.presetFrame = tk.LabelFrame(self.root, text='Select Common Fan Speed Presets', width=560, height=50, pady=3)
+        self.manualFrame = tk.LabelFrame(self.root, text="Select Manual Fan Speed", width=560, height=150, pady=3)
         self.actionFrame = tk.LabelFrame(self.root, text='Click for Action', width=560, height=150, pady=3)
 
         self.root.grid_rowconfigure(1, weight=1)
@@ -23,17 +213,20 @@ class superfansGUI:
         self.loginFrame.grid(row=0, sticky='EW')
         self.statusFrame.grid(row=1, sticky='EW')
         self.presetFrame.grid(row=2, sticky='EW')
-        self.actionFrame.grid(row=3, sticky='EW')
+        self.manualFrame.grid(row=3, sticky='EW')
+        self.actionFrame.grid(row=4, sticky='EW')
 
         ## login frame ##
+        self.chkState = tk.IntVar()
         self.hostnameLabel = tk.Label(self.loginFrame, text='hostname:')
         self.usernameLabel = tk.Label(self.loginFrame, text='username:')
         self.passwordLabel = tk.Label(self.loginFrame, text='password:')
-        self.envpassLabel = tk.Label(self.loginFrame, text='envpass:')
         self.hostnameEntry = tk.Entry(self.loginFrame)
         self.usernameEntry = tk.Entry(self.loginFrame)
         self.passwordEntry = tk.Entry(self.loginFrame, show='*')
         self.envpassEntry = tk.Entry(self.loginFrame, show='*')
+        self.usingenvChkB = tk.Checkbutton(self.loginFrame, text="Check for Env Var", variable=self.chkState, command=self.using_env)
+
         
         self.hostnameLabel.grid(row=0, column=0)
         self.hostnameEntry.grid(row=0, column=1)
@@ -41,22 +234,37 @@ class superfansGUI:
         self.usernameEntry.grid(row=0, column=3)
         self.passwordLabel.grid(row=1, column=0)
         self.passwordEntry.grid(row=1, column=1)
-        self.envpassLabel.grid(row=1, column=2)
-        self.envpassEntry.grid(row=1, column=3)
+        self.usingenvChkB.grid(row=1, column=3)
         
         ## status frame##
         self.statusLabel = tk.Label(self.statusFrame, text='IPMI Not Connected', background='grey')
         self.statusLabel.grid(row=0, column=0)
 
         ## preset frame ##
+        self.preset_var = tk.IntVar()
+        self.r0 = tk.Radiobutton(self.presetFrame, text='None', variable=self.preset_var, value=0)
+        self.r1 = tk.Radiobutton(self.presetFrame, text='Standard', variable=self.preset_var, value=1)
+        self.r2 = tk.Radiobutton(self.presetFrame, text='Full', variable=self.preset_var, value=2)
+        self.r3 = tk.Radiobutton(self.presetFrame, text='Optimal', variable=self.preset_var, value=3)
+        self.r4 = tk.Radiobutton(self.presetFrame, text='Heavy IO', variable=self.preset_var, value=4)
+
+        self.r0.grid(row=0,column=0)
+        self.r1.grid(row=0,column=1)
+        self.r2.grid(row=0,column=2)
+        self.r3.grid(row=0,column=3)
+        self.r4.grid(row=0,column=4)
+
+        ## Manual Frame
+        self.speedVar = tk.DoubleVar()
+        self.scale = tk.Scale(self.manualFrame, variable=self.speedVar, from_=0, to=100, orient='horizontal')
+        self.scale.grid(row=0,column=0)
 
         ## action frame ##
         # Connect, Get Status, Submit, Exit
-        self.checkBtn = tk.Button(self.actionFrame, text='Check Connection').grid(row=0,column=0)
+        self.checkBtn = tk.Button(self.actionFrame, text='Check Connection', command=self.check_conn_btn).grid(row=0,column=0)
         self.fanstatusBtn = tk.Button(self.actionFrame, text='Get Fan Status').grid(row=0,column=1)
-        self.submitBtn = tk.Button(self.actionFrame, text='Submit Fan Speed/Profile').grid(row=0,column=2)
+        self.submitBtn = tk.Button(self.actionFrame, text='Submit Fan Speed/Profile', command=self.submit_picker).grid(row=0,column=2)
         self.Exit = tk.Button(self.actionFrame, text='Exit Program', command=self.exit_program).grid(row=0,column=3)
-
 
         self.root.mainloop()
 
